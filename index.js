@@ -13,6 +13,7 @@ app.set('view engine', 'ejs');
 
 app.get('/', (req, res) => {
 	res.render('index');
+	console.log("uuid=" + req.query.uuid);
 });
 
 app.use(express.static(path.join(__dirname, 'public')));
@@ -29,13 +30,23 @@ const io = require("socket.io")(server);
 
 io.on('connection', (socket) => {
 	game.connection_count++;
-	console.log('New user connected...');
 	socket.username = 'Anonymous' + game.connection_count;
+	console.log('New user connected...' + socket.username);
 	socket.uuid = uuid.v4();
+
+	socket.emit('uuid', {"uuid": socket.uuid});
+	io.sockets.emit('new_message', {message: "" + socket.username + " has joined the chat.", username: "chatbot"});
+
 	if (game.number_of_players < 5) {
 		game.players[socket.uuid] = socket;
 		game.number_of_players++;
 	}
+	socket.on('disconnect',  () => {
+		console.log("" + socket.username + " has disconnected.");
+	});
+	socket.on('uuid',  (data) => {
+		console.log("Receiving uuid:" + data.uuid);
+	});
 
 	socket.on('change_username', (data) => {
 		if (data.username.indexOf("chatbot") < 0) {
@@ -101,12 +112,12 @@ function create_deck () {
 	game.deck.sort(function() {return 0.5 - Math.random()});
 }
 function deal_cards () {
-	for (p in game.players){
-		game.players[p].cards = [];
-	}
-	for (p in game.players){
-		// this just deals 2 cards come back to this later
-		game.players[p].cards.push(game.deck.shift());
+	while(game.deck.length > 0) {
+		for (p in game.players){
+			if (game.deck.length > 0) {
+				game.players[p].cards.push(game.deck.shift());
+			}
+		}
 	}
 	for (p in game.players){
 		game.players[p].emit('your hand', {"hand": game.players[p].cards});
