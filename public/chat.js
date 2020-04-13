@@ -8,7 +8,6 @@ $(function(){
 	var message = $("#message")
 	var username = $("#username")
 	var send_message = $("#send_message")
-	var list_players = $("#list_players")
 	var chatroom = $("#chatroom")
 	var feedback = $("#feedback")
 
@@ -17,13 +16,12 @@ $(function(){
 		socket.emit('new_message', {message : message.val()})
 	})
 
-	//Emit message
-	list_players.click(function(){
-		socket.emit('list_players', {})
-	})
 	socket.on('connect', () => {
 		console.log("Connected...");
-		if (uuid != "") {
+		if (uuid == "" || uuid == 'undefined') {
+			// client has no uuid, request uuid from server.
+			socket.emit("request_uuid");
+		} else {
 			console.log("Send my uuid: " + uuid);
 			socket.emit('uuid', {"uuid": uuid});
 		}
@@ -41,18 +39,17 @@ $(function(){
 		$("#chatroom").scrollTop($("#chatroom")[0].scrollHeight);
 		console.log($("#chatroom").length);
 	})
+
 	socket.on("uuid", (data) => {
 		if (uuid == "") {
 			uuid = data.uuid;
-			$("#chat_url").attr("href", 'http://localhost:5000/?uuid=' + uuid);
-			$("#chat_url").innerHTML = 'http://localhost:5000/?uuid=' + uuid;
 		} else {
+			// the server sent a uuid, but we have one already.
 			socket.emit('uuid', {"uuid": uuid});
 		}
 		$("#chat_url").attr("href", 'http://localhost:5000/?uuid=' + uuid);
 		$("#chat_url").innerHTML = 'http://localhost:5000/?uuid=' + uuid;
 		console.log("uuid=" + uuid);
-		console.log($("#chat_url").attr("href"));
 	});
 
 	//Emit typing
@@ -84,7 +81,11 @@ $(function(){
 			} else if (t.substr(0,4) == '/msg') {
 				socket.emit('private message', t.substr(5) );
 			} else if (t.startsWith('/list')) {
+				socket.emit('list_users');
+			} else if (t.startsWith('/players')) {
 				socket.emit('list_players');
+			} else if (t.startsWith('/join_game')) {
+				socket.emit('join_game');
 			} else if (t.startsWith('/admin ')) {
 				socket.emit('admin', {"command": t} );
 			} else if (t.startsWith('/clear')) {

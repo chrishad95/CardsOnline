@@ -21,31 +21,47 @@ app.use(express.static(path.join(__dirname, 'public')));
 server = app.listen(PORT, () => console.log(`Server started on port ${PORT}`));
 
 var game = {};
-game.connection_count = 0;
 game.players = {};
+game.users = {};
+
 game.number_of_players = 0;
+game.connection_count = 0;
 game.deck = []; 
 
 const io = require("socket.io")(server);
 
 io.on('connection', (socket) => {
 	game.connection_count++;
+
 	socket.username = 'Anonymous' + game.connection_count;
-	console.log('New user connected...' + socket.username);
 	socket.uuid = uuid.v4();
+	
+	console.log('New user connected...' + socket.username);
+	chatbotMessage("" + socket.username + " has joined the chat.");
 
-	socket.emit('uuid', {"uuid": socket.uuid});
-	io.sockets.emit('new_message', {message: "" + socket.username + " has joined the chat.", username: "chatbot"});
-
-	if (game.number_of_players < 5) {
-		game.players[socket.uuid] = socket;
-		game.number_of_players++;
-	}
 	socket.on('disconnect',  () => {
 		console.log("" + socket.username + " has disconnected.");
+		chatbotMessage("" + socket.username + " has left the chat.");
 	});
-	socket.on('uuid',  (data) => {
-		console.log("Receiving uuid:" + data.uuid);
+
+	socket.on('join_game', () => {
+		console.log(socket.username + " has joined the game.");	
+		chatbotMessage(socket.username + " has joined the game.");	
+
+		if (game.number_of_players < 5) {
+			game.players[socket.uuid] = socket;
+			game.number_of_players++;
+		}
+	});
+
+	socket.on('leave_game', () => {
+		// check to see if the game has started?
+
+		console.log(socket.username + " has left the game.");	
+		chatbotMessage(socket.username + " has left the game.");	
+
+		delete game.players[socket.uuid];
+		game.number_of_players--;
 	});
 
 	socket.on('change_username', (data) => {
@@ -61,6 +77,15 @@ io.on('connection', (socket) => {
 	});
 
 	socket.on('list_players', (data) => {
+		var player_names = [];
+		for (p in game.players) {
+			player_names.push( game.players[p].username);
+		}
+		console.log("Sending player names: " + player_names)
+		socket.emit('players_list', {"players": player_names});
+		socket.emit('new_message', {message: "Players: " + player_names , username: "chatbot"});
+	});
+	socket.on('list_users', () => {
 		var player_names = [];
 		for (p in game.players) {
 			player_names.push( game.players[p].username);
@@ -87,6 +112,53 @@ io.on('connection', (socket) => {
 		deal_cards();
 	});
 
+
+
+
+
+	// stuff i am not going to use right now.
+	socket.on('login', (data) => {
+		if (data.username != "" && data.password != "") {
+			for (u in game.users) {
+				if (game.users[u].username == data.username 
+				  && game.users[u].password == data.password) {
+					socket.username = data.username;
+				}
+			}	
+		}
+	});
+	socket.on('set_password', (data) => {
+		if (data.username != "" && data.password != "") {
+			for (u in game.users) {
+				if (game.users[u].username == data.username 
+				  && game.users[u].password == data.password) {
+					socket.username = data.username;
+				}
+			}
+		}
+	});
+	socket.on('uuid',  (data) => {
+		console.log("Receiving uuid from client: " + data.uuid);
+		// find uuid in game.users
+		if (data.uuid in game.users) {
+			console.log("Found uuid: " + data.uuid + " in game.users.");
+			socket.uuid = data.uuid;
+			var old_username = socket.username;
+			socket.username = game.users[socket.uuid].username;
+			chatbotMessage( old_username + " is now known as " + socket.username);
+		} else {
+			console.log("Could not find uuid: " + data.uuid + " in game.users.");
+		}
+	});
+	socket.on('request_uuid',  (data) => {
+		console.log("Client is requesting a uuid.");
+		if (socket.uuid == "" || socket.uuid == 'undefined') {
+			// uuid is blank, create one
+			console.log("Created new uuid for client: " + socket.uuid);
+		}
+		console.log("Sending uuid to client: " + socket.uuid);
+		socket.emit('uuid', {"uuid": socket.uuid});
+	});
 
 });
 
@@ -129,4 +201,9 @@ function Player(socket, name){
 	this.socket = socket;
 	this.name = name;
 }
+
+function chatbotMessage(message) {
+	io.sockets.emit('new_message', {message: message, username: "chatbot"});
+}
+
 
