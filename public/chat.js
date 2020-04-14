@@ -18,39 +18,31 @@ $(function(){
 
 	socket.on('connect', () => {
 		console.log("Connected...");
-		if (uuid == "" || uuid == 'undefined') {
-			// client has no uuid, request uuid from server.
-			socket.emit("request_uuid");
-		} else {
-			console.log("Send my uuid: " + uuid);
-			socket.emit('uuid', {"uuid": uuid});
-		}
+
+		///if (uuid == "" || uuid == 'undefined') {
+		///	// client has no uuid, request uuid from server.
+		///	socket.emit("request_uuid");
+		///} else {
+		///	console.log("Send my uuid: " + uuid);
+		///	socket.emit('uuid', {"uuid": uuid});
+		///}
 
 	});
 	socket.on('disconnect', () => {
 		console.log ("We have been disconnected...");
 	});
-	
+	socket.on('passed_cards', (data) => {
+		chatroom.append("<p class='message'>You are passing cards: " + data.passed_cards + "</p>")
+		$("#chatroom").scrollTop($("#chatroom")[0].scrollHeight);
+	});		
 	//Listen on new_message
 	socket.on("new_message", (data) => {
 		feedback.html('');
 		message.val('');
 		chatroom.append("<p class='message'>" + data.username + ": " + data.message + "</p>")
 		$("#chatroom").scrollTop($("#chatroom")[0].scrollHeight);
-		console.log($("#chatroom").length);
 	})
 
-	socket.on("uuid", (data) => {
-		if (uuid == "") {
-			uuid = data.uuid;
-		} else {
-			// the server sent a uuid, but we have one already.
-			socket.emit('uuid', {"uuid": uuid});
-		}
-		$("#chat_url").attr("href", 'http://localhost:5000/?uuid=' + uuid);
-		$("#chat_url").innerHTML = 'http://localhost:5000/?uuid=' + uuid;
-		console.log("uuid=" + uuid);
-	});
 
 	//Emit typing
 	message.bind("keypress", () => {
@@ -86,6 +78,12 @@ $(function(){
 				socket.emit('list_players');
 			} else if (t.startsWith('/join_game')) {
 				socket.emit('join_game');
+			} else if (t.startsWith('/leave_game')) {
+				socket.emit('leave_game');
+			} else if (t.startsWith('/pass')) {
+				socket.emit('pass', {card: t.split(" ").pop()});
+			} else if (t.startsWith('/random_seats')) {
+				socket.emit('random_seats', {value: t.split(" ").pop()});
 			} else if (t.startsWith('/admin ')) {
 				socket.emit('admin', {"command": t} );
 			} else if (t.startsWith('/clear')) {
@@ -97,6 +95,18 @@ $(function(){
 			this.value = '';
 		}
 
+	});
+
+	socket.on("uuid", (data) => {
+		//if (uuid == "") {
+		//	uuid = data.uuid;
+		//} else {
+		//	// the server sent a uuid, but we have one already.
+		//	socket.emit('uuid', {"uuid": uuid});
+		//}
+		//$("#chat_url").attr("href", 'http://localhost:5000/?uuid=' + uuid);
+		//$("#chat_url").innerHTML = 'http://localhost:5000/?uuid=' + uuid;
+		//console.log("uuid=" + uuid);
 	});
 
 });
