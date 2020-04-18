@@ -27,8 +27,14 @@ game.number_of_players = 0;
 game.connection_count = 0;
 game.deck = []; 
 game.board = [];
+game.pass_round = "left"; // left, right, across, none
+game.status = "game_over"; //game_over, new_game, new_hand, deal_cards, pass_cards, play_round, resolve_round, calculate_score, check_end_game
+game.player_turn = "";
+game.player_order = [];
+
 game.type = "hearts";
 game.random_seats = "off";
+game.auto_join = "on";
 
 
 game.started = false;
@@ -43,18 +49,294 @@ io.on('connection', (socket) => {
 	
 	console.log('New user connected...' + socket.username);
 	chatbotMessage("" + socket.username + " has joined the chat.");
-
-	if (game.number_of_players < 5 && !game.started) {
-		game.players[socket.uuid] = socket;
-		game.number_of_players++;
-		console.log(socket.username + " has joined the game.");	
-		chatbotMessage(socket.username + " has joined the game.");	
+	if (game.auto_join == "on") {
+		if (game.number_of_players < 5 && !game.started) {
+			game.players[socket.uuid] = socket;
+			game.number_of_players++;
+			console.log(socket.username + " has joined the game.");	
+			chatbotMessage(socket.username + " has joined the game.");	
+		}
 	}
 
 
 	socket.on('disconnect',  () => {
 		console.log("" + socket.username + " has disconnected.");
 		chatbotMessage("" + socket.username + " has left the chat.");
+	});
+
+	socket.on('new_game', () => {
+		if (game.started) {
+		} else {
+			if (socket.uuid in game.players) {
+				if (game.number_of_players >= 3) {
+					game.status = "setting up game";
+					game.started = true;
+					game.pass_round = "left";
+					for (p in game.players) {
+						game.players[p].score = 0;
+						game.player_order.push(game.players[p].uuid);
+					}
+					if (game.random_seats == "on") {
+						game.player_order.sort(function() {return 0.5 - Math.random()});
+					}
+					game.status = "new_hand";
+				}
+			}
+		}
+	});
+
+	socket.on('new_hand', () => {
+		if (game.status == "new_hand") {
+			game.status = "creating deck";
+			create_deck();
+			chatbotMessage("The deck was shuffled, a new hand is ready to deal");
+			game.status = "deal_cards";
+		}
+	});
+
+	socket.on('deal_cards', () => {
+		if (game.status == "deal_cards") {
+			game.status = "dealing the cards";
+			if (game.type == "hearts") {
+				if (game.number_of_players == 3) {
+					// remove the 2D card
+					game.deck = game.deck.filter(card => card != '2D');
+				}
+				if (game.number_of_players == 5) {
+					// remove the 2D card and the 2S card
+					game.deck = game.deck.filter(card => card != '2D');
+					game.deck = game.deck.filter(card => card != '2S');
+				}
+			}
+			deal_cards();
+			if (game.pass_round == "none") {
+				game.status = "play_round";
+				game.pass_round = "left";
+			} else {
+				game.status = "pass_cards";
+			}
+		}
+	});
+
+	socket.on('pass', (data) => {
+		if (game.status == "pass_cards") {
+			if (game.players[socket.uuid].passed_cards.length < 3) {
+				card = data.card;
+				console.log(socket.username + " is passing " + card);
+				if (game.players[socket.uuid].cards.indexOf(card) >= 0) {
+					game.players[socket.uuid].passed_cards.push(card);
+					game.players[socket.uuid].cards.splice(game.players[socket.uuid].cards.indexOf(card) , 1);
+				}
+			}
+			socket.emit('passed_cards', {passed_cards: game.players[socket.uuid].passed_cards});
+			// once the all players have passed 3 cards, pass the cards to the player
+			// that gets them
+			var pass_cards_complete = true;
+			for (p in game.players) {
+				if (game.players[p].passed_cards.length < 3) {
+					pass_cards_complete = false;
+				}
+			}
+			if (pass_cards_complete) {
+				game.updateStatus("Passing cards");
+
+				// pass the cards
+
+				if (game.pass_round == "left") {
+					// pass the cards left
+					console.log("player order: " + game.player_order);
+					if (game.number_of_players == 3) {
+						// player 1 gets cards from player 3
+						game.players[game.player_order[0]].cards.push(game.players[game.player_order[2]].passed_cards);
+
+						// player 2 gets cards from player 1
+						game.players[game.player_order[1]].cards.push(game.players[game.player_order[0]].passed_cards);
+						
+						// player 3 gets cards from player 2
+						game.players[game.player_order[2]].cards.push(game.players[game.player_order[1]].passed_cards);
+					}
+
+					if (game.number_of_players == 4) {
+						// player 1 gets cards from player 4
+						game.players[game.player_order[0]].cards.push(game.players[game.player_order[3]].passed_cards);
+
+						// player 2 gets cards from player 1
+						game.players[game.player_order[1]].cards.push(game.players[game.player_order[0]].passed_cards);
+						
+						// player 3 gets cards from player 2
+						game.players[game.player_order[2]].cards.push(game.players[game.player_order[1]].passed_cards);
+
+						// player 4 gets cards from player 3
+						game.players[game.player_order[3]].cards.push(game.players[game.player_order[2]].passed_cards);
+
+					}
+					if (game.number_of_players == 5) {
+						// player 1 gets cards from player 5
+						game.players[game.player_order[0]].cards.push(game.players[game.player_order[4]].passed_cards);
+
+						// player 2 gets cards from player 1
+						game.players[game.player_order[1]].cards.push(game.players[game.player_order[0]].passed_cards);
+						
+						// player 3 gets cards from player 2
+						game.players[game.player_order[2]].cards.push(game.players[game.player_order[1]].passed_cards);
+
+						// player 4 gets cards from player 3
+						game.players[game.player_order[3]].cards.push(game.players[game.player_order[2]].passed_cards);
+
+						// player 5 gets cards from player 4
+						game.players[game.player_order[2]].cards.push(game.players[game.player_order[3]].passed_cards);
+					}
+
+					game.pass_round = "right";
+
+				} else if (game.pass_round == "right") {
+					// pass the cards right
+
+					if (game.number_of_players == 3) {
+						// player 1 gets cards from player 2
+						game.players[game.player_order[0]].cards.push(game.players[game.player_order[1]].passed_cards);
+
+						// player 2 gets cards from player 3
+						game.players[game.player_order[1]].cards.push(game.players[game.player_order[2]].passed_cards);
+
+						// player 3 gets cards from player 1
+						game.players[game.player_order[2]].cards.push(game.players[game.player_order[0]].passed_cards);
+					}
+					
+					if (game.number_of_players == 4) {
+						// player 1 gets cards from player 2
+						game.players[game.player_order[0]].cards.push(game.players[game.player_order[1]].passed_cards);
+
+						// player 2 gets cards from player 3
+						game.players[game.player_order[1]].cards.push(game.players[game.player_order[2]].passed_cards);
+
+						// player 3 gets cards from player 4
+						game.players[game.player_order[2]].cards.push(game.players[game.player_order[3]].passed_cards);
+
+						// player 4 gets cards from player 1
+						game.players[game.player_order[3]].cards.push(game.players[game.player_order[0]].passed_cards);
+					}
+					if (game.number_of_players == 5) {
+						// player 1 gets cards from player 2
+						game.players[game.player_order[0]].cards.push(game.players[game.player_order[1]].passed_cards);
+
+						// player 2 gets cards from player 3
+						game.players[game.player_order[1]].cards.push(game.players[game.player_order[2]].passed_cards);
+
+						// player 3 gets cards from player 4
+						game.players[game.player_order[2]].cards.push(game.players[game.player_order[3]].passed_cards);
+
+						// player 4 gets cards from player 5
+						game.players[game.player_order[3]].cards.push(game.players[game.player_order[4]].passed_cards);
+
+						// player 5 gets cards from player 1
+						game.players[game.player_order[4]].cards.push(game.players[game.player_order[0]].passed_cards);
+					}
+
+					game.pass_round = "across";
+
+				} else if (game.pass_round == "across") {
+					// pass the cards across
+
+					if (game.number_of_players == 3) {
+						// player 1 gets cards from player 2
+						game.players[game.player_order[0]].cards.push(game.players[game.player_order[1]].passed_cards);
+
+						// player 2 gets cards from player 3
+						game.players[game.player_order[1]].cards.push(game.players[game.player_order[2]].passed_cards);
+
+						// player 3 gets cards from player 1
+						game.players[game.player_order[2]].cards.push(game.players[game.player_order[0]].passed_cards);
+					}
+					
+					if (game.number_of_players == 4) {
+						// player 1 gets cards from player 2
+						game.players[game.player_order[0]].cards.push(game.players[game.player_order[2]].passed_cards);
+
+						// player 2 gets cards from player 3
+						game.players[game.player_order[1]].cards.push(game.players[game.player_order[3]].passed_cards);
+
+						// player 3 gets cards from player 4
+						game.players[game.player_order[2]].cards.push(game.players[game.player_order[0]].passed_cards);
+
+						// player 4 gets cards from player 1
+						game.players[game.player_order[3]].cards.push(game.players[game.player_order[1]].passed_cards);
+					}
+					if (game.number_of_players == 5) {
+						// player 1 gets cards from player 2
+						game.players[game.player_order[0]].cards.push(game.players[game.player_order[3]].passed_cards);
+
+						// player 2 gets cards from player 3
+						game.players[game.player_order[1]].cards.push(game.players[game.player_order[4]].passed_cards);
+
+						// player 3 gets cards from player 4
+						game.players[game.player_order[2]].cards.push(game.players[game.player_order[0]].passed_cards);
+
+						// player 4 gets cards from player 5
+						game.players[game.player_order[3]].cards.push(game.players[game.player_order[1]].passed_cards);
+
+						// player 5 gets cards from player 1
+						game.players[game.player_order[4]].cards.push(game.players[game.player_order[2]].passed_cards);
+					}
+
+					game.pass_round = "none";
+				}
+
+				for (p in game.players) {
+					if (game.players[p].cards.indexOf("2C") >= 0) {
+						game.player_turn = p;
+						console.log("Player " + game.players[game.player_turn].username + " has the 2C. It is their turn to play that card.");
+					}
+					game.players[p].passed_cards=[];
+
+				}
+				chatbotMessage("It is " + game.players[game.player_turn].username + "'s turn to play.");
+				game.updateStatus("play_round");
+			}
+		}
+
+	});
+
+	socket.on('play_card', (data) => {
+		// is it this player's turn?
+		// also make sure the player cannot take two turns
+
+		if (socket.uuid == game.player_turn) {
+			if (socket.uuid in game.cards_played) {
+				// this player has already played a card for this round
+			} else {
+				// does this player have the two of clubs?
+				if (game.players[socket.uuid].cards.indexOf("2C") >=0) {
+					if (data.card == "2C") {
+						// take this card out of the players hand and add it to cards_played
+						game.cards_played[socket.uuid] = game.players[socket.uuid].cards.splice(game.players[socket.uuid].cards.indexOf(data.card) , 1);
+						if (game.next_player() in game.cards_played) {
+						} else {
+							game.player_turn = game.next_player();
+						}
+					} else {
+						socket.emit("new_message", {message: "You must play the 2C.  /play_card 2C", username: "chatbot"});
+					}
+				} else {
+					if (game.players[socket.uuid].cards.indexOf(data.card) >= 0) {
+						// take this card out of the players hand and it to cards_played
+						game.cards_played[socket.uuid] = game.players[socket.uuid].cards.splice(game.players[socket.uuid].cards.indexOf(data.card) , 1);
+						if (game.next_player() in game.cards_played) {
+						} else {
+							game.player_turn = game.next_player();
+						}
+					} else {
+						socket.emit("new_message", {message: "You must play a card in your hand.", username: "chatbot"});
+					}
+				}
+			}
+		}
+	});
+
+	socket.on('game_status', () => {
+		socket.emit('new_message', {message: "Game Status: " + game.status, username: "chatbot"});
+		console.log("Next player => " + game.next_player());
+
 	});
 
 	socket.on('join_game', () => {
@@ -116,47 +398,12 @@ io.on('connection', (socket) => {
 	socket.on('shuffle', () => {
 	});
 
-	socket.on('new_hand', () => {
-		game.started = true;
-		create_deck();
-		chatbotMessage("The deck was shuffled, a new hand is ready to deal");
-
-	});
 
 	socket.on('cards', () => {
 		socket.emit('new_message', {message: "Your cards: " + game.players[socket.uuid].cards , username: "chatbot"});
 
 	});
 
-	socket.on('pass', (data) => {
-		if (game.players[socket.uuid].passed_cards.length < 3) {
-			card = data.card;
-			console.log(socket.username + " is passing " + card);
-			if (game.players[socket.uuid].cards.indexOf(card) >= 0) {
-				game.players[socket.uuid].passed_cards.push(card);
-				game.players[socket.uuid].cards.splice(game.players[socket.uuid].cards.indexOf(card) , 1);
-			}
-		}
-		socket.emit('passed_cards', {passed_cards: game.players[socket.uuid].passed_cards});
-		// once the all players have passed 3 cards, pass the cards to the player
-		// that gets them
-
-	});
-
-	socket.on('deal_cards', () => {
-		if (game.type == "hearts") {
-			if (game.number_of_players == 3) {
-				// remove the 2D card
-				game.deck = game.deck.filter(card => card != '2D');
-			}
-			if (game.number_of_players == 5) {
-				// remove the 2D card and the 2S card
-				game.deck = game.deck.filter(card => card != '2D');
-				game.deck = game.deck.filter(card => card != '2S');
-			}
-		}
-		deal_cards();
-	});
 
 
 	socket.on('random_seats', (data) => {
@@ -257,6 +504,14 @@ function deal_cards () {
 function Player(socket, name){
 	this.socket = socket;
 	this.name = name;
+}
+
+game.updateStatus = (s) => {
+	game.status = s;
+	io.sockets.emit('status', {"status": game.status});
+}
+game.next_player = () => {
+	return game.player_order[(1 + game.player_order.indexOf(game.player_turn)) % game.number_of_players];
 }
 
 function chatbotMessage(message) {

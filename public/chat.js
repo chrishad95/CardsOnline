@@ -80,8 +80,16 @@ $(function(){
 				socket.emit('join_game');
 			} else if (t.startsWith('/leave_game')) {
 				socket.emit('leave_game');
+			} else if (t.startsWith('/new_game')) {
+				socket.emit('new_game');
+			} else if (t.startsWith('/status')) {
+				socket.emit('game_status');
 			} else if (t.startsWith('/pass')) {
-				socket.emit('pass', {card: t.split(" ").pop()});
+				var pass_cards =  t.split(" ");
+				pass_cards.shift(); // take off /pass in the front
+				for(c in pass_cards) {
+					socket.emit('pass', {card: pass_cards[c] });
+				}
 			} else if (t.startsWith('/random_seats')) {
 				socket.emit('random_seats', {value: t.split(" ").pop()});
 			} else if (t.startsWith('/admin ')) {
