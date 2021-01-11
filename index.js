@@ -48,20 +48,35 @@ io.on('connection', (socket) => {
 	socket.uuid = uuid.v4();
 	
 	console.log('New user connected...' + socket.username);
-	chatbotMessage("" + socket.username + " has joined the chat.");
+	chatbotMessageAll("" + socket.username + " has joined the chat.");
 	if (game.auto_join == "on") {
 		if (game.number_of_players < 5 && !game.started) {
 			game.players[socket.uuid] = socket;
 			game.number_of_players++;
 			console.log(socket.username + " has joined the game.");	
-			chatbotMessage(socket.username + " has joined the game.");	
+			chatbotMessageAll(socket.username + " has joined the game.");	
 		}
 	}
 
 
 	socket.on('disconnect',  () => {
 		console.log("" + socket.username + " has disconnected.");
-		chatbotMessage("" + socket.username + " has left the chat.");
+		chatbotMessageAll("" + socket.username + " has left the chat.");
+	});
+
+	socket.on('commands', (data) => {
+		// tell the user what commands they have available
+		socket.emit('new_message', {message: "Available Commands:", username: "chatbot"});
+		socket.emit('new_message', {message: "/commands list available commands", username: "chatbot"});
+		socket.emit('new_message', {message: "/nick [nickname] change nickname", username: "chatbot"});
+		socket.emit('new_message', {message: "/new_game create a new game", username: "chatbot"});
+		socket.emit('new_message', {message: "/new_hand start a new hand", username: "chatbot"});
+		socket.emit('new_message', {message: "/shuffle shuffle cards", username: "chatbot"});
+		socket.emit('new_message', {message: "/cards list cards in your hand", username: "chatbot"});
+		socket.emit('new_message', {message: "/deal_cards deal cards to players", username: "chatbot"});
+		socket.emit('new_message', {message: "/pass pass cards to player", username: "chatbot"});
+		socket.emit('new_message', {message: "/status show game status", username: "chatbot"});
+		
 	});
 
 	socket.on('new_game', () => {
@@ -80,6 +95,8 @@ io.on('connection', (socket) => {
 						game.player_order.sort(function() {return 0.5 - Math.random()});
 					}
 					game.status = "new_hand";
+				} else {
+				chatbotMessage("Not enough players. 3 players needed. [" + game.number_of_players + "/3]", socket);
 				}
 			}
 		}
@@ -89,7 +106,7 @@ io.on('connection', (socket) => {
 		if (game.status == "new_hand") {
 			game.status = "creating deck";
 			create_deck();
-			chatbotMessage("The deck was shuffled, a new hand is ready to deal");
+			chatbotMessageAll("The deck was shuffled, a new hand is ready to deal");
 			game.status = "deal_cards";
 		}
 	});
@@ -290,7 +307,7 @@ io.on('connection', (socket) => {
 					game.players[p].passed_cards=[];
 
 				}
-				chatbotMessage("It is " + game.players[game.player_turn].username + "'s turn to play.");
+				chatbotMessageAll("It is " + game.players[game.player_turn].username + "'s turn to play.");
 				game.updateStatus("play_round");
 			}
 		}
@@ -346,7 +363,7 @@ io.on('connection', (socket) => {
 				game.players[socket.uuid] = socket;
 				game.number_of_players++;
 				console.log(socket.username + " has joined the game.");	
-				chatbotMessage(socket.username + " has joined the game.");	
+				chatbotMessageAll(socket.username + " has joined the game.");	
 			}
 		}
 	});
@@ -358,7 +375,7 @@ io.on('connection', (socket) => {
 			delete game.players[socket.uuid];
 			game.number_of_players--;
 			console.log(socket.username + " has left the game.");	
-			chatbotMessage(socket.username + " has left the game.");	
+			chatbotMessageAll(socket.username + " has left the game.");	
 		}
 
 
@@ -368,7 +385,7 @@ io.on('connection', (socket) => {
 		if (data.username.indexOf("chatbot") < 0) {
 			var old_username = socket.username;
 			socket.username = data.username;
-			chatbotMessage("" + old_username + " is now known as " + socket.username);
+			chatbotMessageAll("" + old_username + " is now known as " + socket.username);
 		}
 	});
 
@@ -413,7 +430,7 @@ io.on('connection', (socket) => {
 		if (data.value == "off") {
 			game.random_seats = "off";
 		}
-		chatbotMessage("Random seats is turned " + game.random_seats);
+		chatbotMessageAll("Random seats is turned " + game.random_seats);
 
 	});
 
@@ -448,7 +465,7 @@ io.on('connection', (socket) => {
 			socket.uuid = data.uuid;
 			var old_username = socket.username;
 			socket.username = game.users[socket.uuid].username;
-			chatbotMessage( old_username + " is now known as " + socket.username);
+			chatbotMessageAll( old_username + " is now known as " + socket.username);
 		} else {
 			console.log("Could not find uuid: " + data.uuid + " in game.users.");
 		}
@@ -514,8 +531,13 @@ game.next_player = () => {
 	return game.player_order[(1 + game.player_order.indexOf(game.player_turn)) % game.number_of_players];
 }
 
-function chatbotMessage(message) {
-	io.sockets.emit('new_message', {message: message, username: "chatbot"});
+function chatbotMessageAll(m) {
+	io.sockets.emit('new_message', {message: m, username: "chatbot"});
 }
+
+function chatbotMessage(m, s) {
+		s.emit('new_message', {message: m , username: "chatbot"});
+}
+
 
 

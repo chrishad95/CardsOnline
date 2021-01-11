@@ -66,6 +66,8 @@ $(function(){
 				socket.emit('new_hand');
 			} else if (t.startsWith('/cards')) {
 				socket.emit('cards');
+			} else if (t.startsWith('/commands')) {
+				socket.emit('commands');
 			} else if (t.startsWith('/deal_cards')) {
 				socket.emit('deal_cards');
 			} else if (t.substr(0,6) == '/login') {
